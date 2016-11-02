@@ -136,14 +136,14 @@ func (ts *tribServer) PostTribble(args *tribrpc.PostTribbleArgs, reply *tribrpc.
 	for err == nil {
 		reply.PostKey = util.FormatPostKey(args.UserID, ts.postTime)
 		ts.postTime += 1
-		_, err := ts.ls.Get(reply.PostKey)
+		_, err = ts.ls.Get(reply.PostKey)
 	}
 	t := new(tribrpc.Tribble)
 	t.UserID = args.UserID 
 	t.Posted = time.Now()
 	t.Contents = args.Contents 
 	b, _ := json.Marshal(t) 
-	err := ts.ls.Put(reply.PostKey, string(b))
+	err = ts.ls.Put(reply.PostKey, string(b))
 	reply.Status = tribrpc.OK
 	return err 
 }
@@ -165,16 +165,12 @@ func (ts *tribServer) GetTribbles(args *tribrpc.GetTribblesArgs, reply *tribrpc.
 		return err
 	}
 	tribs := make([]tribrpc.Tribble, 100)
-	i := 0
-	for (i < len(l) && i < 100) {
-		var t tribrpc.Tribble 
-		s, err := ts.ls.Get(l[i])
-		if err != nil {
-			json.Unmarshal([]byte(s), &t)
-			tribs[i] = t 
-			i += 1
-		}
+	if len(l) == 0{
+		reply.Tribbles = tribs
+		reply.Status = tribrpc.OK	
+		return nil 	
 	}
+	tribs = sortList(l, ts)
 	reply.Tribbles = tribs
 	reply.Status = tribrpc.OK
 	return err
@@ -188,22 +184,17 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 	}
 	tribs := make([]tribrpc.Tribble, 100)
 	latest := make([]tribrpc.Tribble, len(l))
-	tribLists := make([][]string, len(l))
+	tribLists := make([][]tribrpc.Tribble, len(l))
 	nonempty := 0
 	j := 0
 	for (j < len(l)){
 		k := util.FormatTribListKey(l[j])
 		tl, err := ts.ls.GetList(k)
-		tribLists[j] = tl
-		if err == nil && len(tl) > 0{
+		tribLists[j] = sortList(tl, ts)
+		if err == nil && len(tribLists[j]) > 0{
 			nonempty += 1 
-			var t tribrpc.Tribble
-			s, err := ts.ls.Get(tl[0])
-			if err != nil {
-				json.Unmarshal([]byte(s), &t)
-				latest[j] = t
-				tribLists[j] = tl[1:]
-			}
+			latest[j] = tribLists[j][0]
+			tribLists[j] = tribLists[j][1:]
 		}
 		j += 1
 	}
@@ -228,23 +219,8 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 		tribs[i] = min 
 		//replace the index-th 
 		if (len(tribLists[index]) > 0){
-			var t tribrpc.Tribble
-			k := 0
-			found := false 
-			for len(tribLists[index]) > 0{
-				s, err := ts.ls.Get(tribLists[index][k])
-				if err != nil {
-					json.Unmarshal([]byte(s), &t)
-					latest[index] = t
-					tribLists[index] = tribLists[index][k+1:]
-					found = true 
-					break
-				}
-				k += 1
-			}
-			if found == false {
-				nonempty -= 1
-			}
+			latest[index] = tribLists[index][0]
+			tribLists[index] = tribLists[index][1:]
 		} else {
 			nonempty -= 1
 		}
@@ -253,4 +229,36 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 	reply.Status = tribrpc.OK
 	reply.Tribbles = tribs
 	return nil
+}
+
+func sortList(l []string, ts *tribServer) []tribrpc.Tribble {
+	tribs := make([]tribrpc.Tribble, 100)
+	i := 0
+	//sort l
+	for _, t1 := range l {
+		var minT tribrpc.Tribble 
+		s, err := ts.ls.Get(t1)
+		if err != nil {
+			json.Unmarshal([]byte(s), &minT)
+		} else {
+			continue 
+		}
+		for _, t2 := range l {
+			var t tribrpc.Tribble 
+			s, err := ts.ls.Get(t2)
+			if err != nil {
+				json.Unmarshal([]byte(s), &t)
+				if t.Posted.After(minT.Posted){
+					minT = t 
+				}
+			}
+		}
+		tribs[i] = minT 
+		i += 1
+		if i >= 100 {
+			break 
+		}		
+	}
+	return tribs
+
 }

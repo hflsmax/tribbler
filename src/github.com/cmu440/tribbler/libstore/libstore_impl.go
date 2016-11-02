@@ -15,7 +15,6 @@ type value struct {
 	lease storagerpc.Lease
 	start time.Time
 	queries map[time.Time]bool
-	m *sync.Mutex
 }
 
 type libstore struct {
