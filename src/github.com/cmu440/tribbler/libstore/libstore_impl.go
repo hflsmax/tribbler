@@ -66,14 +66,14 @@ func NewLibstore(masterServerHostPort, myHostPort string, mode LeaseMode) (Libst
 	args := &storagerpc.GetServersArgs{}
 	var reply storagerpc.GetServersReply
 	count := 0
-	err = ls.client.Call("StorageServer.GetServer", args, reply)
+	err = ls.client.Call("StorageServer.GetServers", args, &reply)
 	if reply.Status == storagerpc.OK{
 		ls.servers = reply.Servers
 	} else {
 		for (count < 5){
 			count += 1
 			time.Sleep(time.Duration(time.Second))
-			err = ls.client.Call("StorageServer.GetServer", args, reply)
+			err = ls.client.Call("StorageServer.GetServers", args, &reply)
 			if reply.Status == storagerpc.OK {
 				ls.servers = reply.Servers
 				break
@@ -94,15 +94,23 @@ func (ls *libstore) Get(key string) (string, error) {
 func (ls *libstore) Put(key, value string) error {
 	args := &storagerpc.PutArgs{key, value}
 	var reply storagerpc.PutReply 
-	err := ls.client.Call("StorageServer.Put", args, reply)
-	return err
+	ls.client.Call("StorageServer.Put", args, &reply)
+	if reply.Status == storagerpc.OK {
+		return nil 
+	} else {
+		return errors.New("not put")
+	}
 }
 
 func (ls *libstore) Delete(key string) error {
 	args := &storagerpc.DeleteArgs{key}
 	var reply storagerpc.DeleteReply 
-	err := ls.client.Call("StorageServer.Delete", args, reply)
-	return err
+	ls.client.Call("StorageServer.Delete", args, &reply)
+	if reply.Status == storagerpc.OK {
+		return nil 
+	} else {
+		return errors.New("not delete")
+	}
 }
 
 func (ls *libstore) GetList(key string) ([]string, error) {
@@ -113,15 +121,23 @@ func (ls *libstore) GetList(key string) ([]string, error) {
 func (ls *libstore) RemoveFromList(key, removeItem string) error {
 	args := &storagerpc.PutArgs{key, removeItem}
 	var reply storagerpc.PutReply 
-	err := ls.client.Call("StorageServer.RemoveFromList", args, reply)
-	return err
+	ls.client.Call("StorageServer.RemoveFromList", args, &reply)
+	if reply.Status == storagerpc.OK {
+		return nil 
+	} else {
+		return errors.New("not RemoveFromList")
+	}
 }
 
 func (ls *libstore) AppendToList(key, newItem string) error {
 	args := &storagerpc.PutArgs{key, newItem}
 	var reply storagerpc.PutReply 
-	err := ls.client.Call("StorageServer.AppendToList", args, reply)
-	return err
+	ls.client.Call("StorageServer.AppendToList", args, &reply)
+	if reply.Status == storagerpc.OK {
+		return nil 
+	} else {
+		return errors.New("not AppendToList")
+	}
 }
 
 func (ls *libstore) RevokeLease(args *storagerpc.RevokeLeaseArgs, reply *storagerpc.RevokeLeaseReply) error {
@@ -151,7 +167,7 @@ func findNode(key string, servers []storagerpc.Node) storagerpc.Node {
 func get(key string, queryType int, ls *libstore) (string, []string, error){
  	v, ok := ls.cache[key]
  	var valid float64
- 	if v.lease.ValidSeconds != 0 {
+ 	if ok && v.lease.ValidSeconds != 0 {
  		valid = float64(v.lease.ValidSeconds) - time.Now().Sub(v.start).Seconds()
  	} else {
  		valid = 0
@@ -163,13 +179,16 @@ func get(key string, queryType int, ls *libstore) (string, []string, error){
 			return "", v.contents, nil
 		}
 	} else {
-		if ok == false {
-			ls.cache[key] = new(value)
-			ls.cache[key].queries = make(map[time.Time]bool)
+		var n time.Time 
+		if ls.mode != Never {
+			if ok == false {
+				ls.cache[key] = new(value)
+				ls.cache[key].queries = make(map[time.Time]bool)
+			}
+			v = ls.cache[key]
+			n = time.Now()
+			v.queries[n] = true 
 		}
-		v = ls.cache[key]
-		n := time.Now()
-		v.queries[n] = true 
 		count := 0
 		if ls.mode == Normal {
 			for t := range v.queries {
@@ -194,33 +213,45 @@ func get(key string, queryType int, ls *libstore) (string, []string, error){
 			args := &storagerpc.GetArgs{key, true, hostport}
 			if queryType == 0{
 				var reply storagerpc.GetReply 
-				err := cli.Call("StorageServer.Get", args, reply)
+				err := cli.Call("StorageServer.Get", args, &reply)
 				if (reply.Status == storagerpc.OK){
 					v.content = reply.Value
 					v.lease = reply.Lease
 					v.start = time.Now()
-				} 
+				} else {
+					return reply.Value, nil, errors.New("not get")
+				}
 				return reply.Value, nil, err
 			} else {
 				var reply storagerpc.GetListReply 
-				err := cli.Call("StorageServer.GetList", args, reply)
+				err := cli.Call("StorageServer.GetList", args, &reply)
 				if (reply.Status == storagerpc.OK){
 					v.contents = reply.Value
 					v.lease = reply.Lease
 					v.start = time.Now()
-				} 
+				} else {
+					return "", reply.Value, errors.New("not get list")
+				}
 				return "", reply.Value, err 
 			}
 		} else {
 			args := &storagerpc.GetArgs{key, false, hostport}
 			if queryType == 0{
 				var reply storagerpc.GetReply 
-				err := ls.client.Call("StorageServer.Get", args, reply)	
-				return reply.Value, nil, err
+				err := ls.client.Call("StorageServer.Get", args, &reply)
+				if reply.Status == storagerpc.OK{	
+					return reply.Value, nil, err
+				} else {
+					return reply.Value, nil, errors.New("not get")
+				}
 			} else {
 				var reply storagerpc.GetListReply 
-				err := ls.client.Call("StorageServer.GetList", args, reply)	
-				return "", reply.Value, err 			
+				err := ls.client.Call("StorageServer.GetList", args, &reply)
+				if reply.Status == storagerpc.OK {
+					return "", reply.Value, err
+				} else {
+					return "", reply.Value, errors.New("not get list")
+				}			
 			}	
 		}
 	}

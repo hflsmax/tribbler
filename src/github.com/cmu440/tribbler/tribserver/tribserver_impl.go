@@ -11,7 +11,6 @@ import (
 	"time"
 	"encoding/json"
 	"bytes"
-	"fmt"
 )
 
 type tribServer struct {
@@ -35,7 +34,7 @@ func NewTribServer(masterServerHostPort, myHostPort string) (TribServer, error) 
     tribServer.ls = ls
     tribServer.postTime = 0
     // Create the server socket that will listen for incoming RPCs.
-    listener, err := net.Listen("tcp", fmt.Sprintf(":%d", myHostPort))
+    listener, err := net.Listen("tcp", myHostPort)
     if err != nil {
         return nil, err
     }
@@ -90,6 +89,15 @@ func (ts *tribServer) AddSubscription(args *tribrpc.SubscriptionArgs, reply *tri
 		}
 		err = ts.ls.AppendToList(lid, args.TargetUserID)
 		reply.Status = tribrpc.OK
+		lid2 := util.FormatSubListKey(args.TargetUserID)
+		l4, _ := ts.ls.GetList(lid2)
+		for _, str := range l4 {
+			if bytes.Compare([]byte(str), []byte(args.UserID)) == 0 {
+				ts.ls.AppendToList(id, args.TargetUserID)
+				ts.ls.AppendToList(tid, args.UserID)
+				break
+			}			
+		}
 	}	
 	return err
 }
@@ -99,7 +107,7 @@ func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *
 	tid := util.FormatUserKey(args.TargetUserID)
 	var err error 
 	_, err1 := ts.ls.GetList(id)
-	_, err2 := ts.ls.GetList(tid)
+	l2, err2 := ts.ls.GetList(tid)
 	if err1 != nil {
 		reply.Status = tribrpc.NoSuchUser
 	} else if err2 != nil {
@@ -112,6 +120,13 @@ func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *
 			if bytes.Compare([]byte(str), []byte(args.TargetUserID)) == 0 {
 				reply.Status = tribrpc.OK 
 				err := ts.ls.RemoveFromList(lid, args.TargetUserID)
+				for _, str2 := range l2 {
+					if bytes.Compare([]byte(str2), []byte(args.UserID)) == 0 {
+						ts.ls.RemoveFromList(tid, args.UserID)
+						ts.ls.RemoveFromList(id, args.TargetUserID)
+						break
+					}
+				}
 				return err 
 			}
 		}
@@ -124,8 +139,13 @@ func (ts *tribServer) GetFriends(args *tribrpc.GetFriendsArgs, reply *tribrpc.Ge
 
 	id := util.FormatUserKey(args.UserID)
 	l, err := ts.ls.GetList(id)
-	reply.Status = tribrpc.OK
-	reply.UserIDs = l
+	if err != nil {
+		reply.Status = tribrpc.NoSuchUser
+		return nil
+	} else {
+		reply.Status = tribrpc.OK
+		reply.UserIDs = l[1:]
+	}
 	return err
 }
 
@@ -137,6 +157,11 @@ func (ts *tribServer) PostTribble(args *tribrpc.PostTribbleArgs, reply *tribrpc.
 		reply.PostKey = util.FormatPostKey(args.UserID, ts.postTime)
 		ts.postTime += 1
 		_, err = ts.ls.Get(reply.PostKey)
+	} 
+	_, err = ts.ls.GetList(util.FormatUserKey(args.UserID))
+	if err != nil {
+		reply.Status = tribrpc.NoSuchUser
+		return nil 
 	}
 	t := new(tribrpc.Tribble)
 	t.UserID = args.UserID 
@@ -144,43 +169,63 @@ func (ts *tribServer) PostTribble(args *tribrpc.PostTribbleArgs, reply *tribrpc.
 	t.Contents = args.Contents 
 	b, _ := json.Marshal(t) 
 	err = ts.ls.Put(reply.PostKey, string(b))
+	ts.ls.AppendToList(util.FormatTribListKey(args.UserID), reply.PostKey)
 	reply.Status = tribrpc.OK
 	return err 
 }
 
 func (ts *tribServer) DeleteTribble(args *tribrpc.DeleteTribbleArgs, reply *tribrpc.DeleteTribbleReply) error {
+	_, err2 := ts.ls.GetList(util.FormatUserKey(args.UserID))
+	if err2 != nil {
+		reply.Status = tribrpc.NoSuchUser
+		return nil 
+	}
+	_, err3 := ts.ls.Get(args.PostKey)
+	if err3 != nil {
+		reply.Status = tribrpc.NoSuchPost
+		return nil
+	}
 	err := ts.ls.Delete(args.PostKey)
 	if err != nil {
 		reply.Status = tribrpc.NoSuchPost
+		return nil
 	} else {
 		reply.Status = tribrpc.OK
+		ts.ls.RemoveFromList(util.FormatTribListKey(args.UserID), args.PostKey)
 	}
 	return err 
 }
 
 func (ts *tribServer) GetTribbles(args *tribrpc.GetTribblesArgs, reply *tribrpc.GetTribblesReply) error {
+	_, err1 := ts.ls.GetList(util.FormatUserKey(args.UserID))
+	if err1 != nil {
+		reply.Status = tribrpc.NoSuchUser
+		return nil
+	}
 	k := util.FormatTribListKey(args.UserID)
 	l, err := ts.ls.GetList(k)
-	if (err != nil) {
-		return err
-	}
-	tribs := make([]tribrpc.Tribble, 100)
 	if len(l) == 0{
-		reply.Tribbles = tribs
+		reply.Tribbles = nil
 		reply.Status = tribrpc.OK	
 		return nil 	
 	}
-	tribs = sortList(l, ts)
+	tribs := sortList(l, ts)
 	reply.Tribbles = tribs
 	reply.Status = tribrpc.OK
 	return err
 }
 
 func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, reply *tribrpc.GetTribblesReply) error {
+	_, err1 := ts.ls.GetList(util.FormatUserKey(args.UserID))
+	if err1 != nil {
+		reply.Status = tribrpc.NoSuchUser
+		return nil
+	}
 	k := util.FormatSubListKey(args.UserID)
 	l, err := ts.ls.GetList(k)
 	if (err != nil){
-		return err 
+		reply.Status = tribrpc.OK
+		return nil
 	}
 	tribs := make([]tribrpc.Tribble, 100)
 	latest := make([]tribrpc.Tribble, len(l))
@@ -205,12 +250,7 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 		j = 0
 		for (j < len(latest)) {
 			t := latest[j]
-			if len(t.UserID) != 0 && len(min.UserID) == 0 {
-				min = t 
-				index = j
-				continue 
-			}
-			if len(t.UserID) != 0 && t.Posted.After(min.Posted) {
+			if len(t.UserID) != 0 && (len(min.UserID) == 0 || t.Posted.After(min.Posted)) {
 				min = t 
 				index = j
 			}
@@ -222,12 +262,13 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 			latest[index] = tribLists[index][0]
 			tribLists[index] = tribLists[index][1:]
 		} else {
+			latest[index].UserID = ""
 			nonempty -= 1
 		}
 		i += 1
 	}
 	reply.Status = tribrpc.OK
-	reply.Tribbles = tribs
+	reply.Tribbles = tribs[:i]
 	return nil
 }
 
@@ -235,30 +276,36 @@ func sortList(l []string, ts *tribServer) []tribrpc.Tribble {
 	tribs := make([]tribrpc.Tribble, 100)
 	i := 0
 	//sort l
-	for _, t1 := range l {
+	for s1, t1 := range l {
 		var minT tribrpc.Tribble 
 		s, err := ts.ls.Get(t1)
-		if err != nil {
+		if err == nil {
 			json.Unmarshal([]byte(s), &minT)
 		} else {
 			continue 
 		}
-		for _, t2 := range l {
+		index := s1 
+		for s2, t2 := range l {
+			if s2 < s1 {continue}
 			var t tribrpc.Tribble 
 			s, err := ts.ls.Get(t2)
-			if err != nil {
+			if err == nil {
 				json.Unmarshal([]byte(s), &t)
 				if t.Posted.After(minT.Posted){
 					minT = t 
+					index = s2 
 				}
 			}
 		}
 		tribs[i] = minT 
+		temp := l[index]
+		l[index] = l[s1]
+		l[s1] = temp
 		i += 1
 		if i >= 100 {
 			break 
 		}		
 	}
-	return tribs
+	return tribs[:i]
 
 }
