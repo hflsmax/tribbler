@@ -1,22 +1,22 @@
 package storageserver
 
 import (
-	"sync"
 	"github.com/cmu440/tribbler/rpc/storagerpc"
-	"net/rpc"
-	"time"
-	"strconv"
-	"net/http"
 	"net"
+	"net/http"
+	"net/rpc"
+	"strconv"
+	"sync"
+	"time"
 	// "fmt"
 )
 
 type storageServer struct {
-	storage map[string]interface{}
-	storageMutex *sync.Mutex
-	servers []storagerpc.Node
-	serversMutex *sync.Mutex
-	numNodes int
+	storage           map[string]interface{}
+	storageMutex      *sync.Mutex
+	servers           []storagerpc.Node
+	serversMutex      *sync.Mutex
+	numNodes          int
 	allRegisterNotify chan bool
 }
 
@@ -41,9 +41,9 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 			return nil, err
 		}
 		args := &storagerpc.RegisterArgs{
-			ServerInfo: storagerpc.Node {
+			ServerInfo: storagerpc.Node{
 				HostPort: "127.0.0.1:" + strconv.Itoa(port),
-				NodeID: nodeID}}
+				NodeID:   nodeID}}
 		var reply storagerpc.RegisterReply
 		for {
 			err = cli.Call("StorageSrver.RegisterServer", args, &reply)
@@ -57,24 +57,22 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 		// This is a master
 		ss.servers = []storagerpc.Node{storagerpc.Node{
 			HostPort: "127.0.0.1:" + strconv.Itoa(port),
-			NodeID: nodeID}}
+			NodeID:   nodeID}}
 		ss.numNodes = numNodes
 		ss.allRegisterNotify = make(chan bool)
 
+		listener, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		if err != nil {
+			return nil, err
+		}
+		err = rpc.RegisterName("StorageServer", storagerpc.Wrap(ss))
+		if err != nil {
+			return nil, err
+		}
+		rpc.HandleHTTP()
+		go http.Serve(listener, nil)
 
-		listener, err := net.Listen("tcp", "127.0.0.1:" + strconv.Itoa(port))
-    if err != nil {
-        return nil, err
-    }
-    err = rpc.RegisterName("StorageServer", storagerpc.Wrap(ss))
-    if err != nil {
-        return nil, err
-    }
-    rpc.HandleHTTP()
-    go http.Serve(listener, nil)
-
-
-		<- ss.allRegisterNotify
+		<-ss.allRegisterNotify
 
 		return ss, nil
 	}

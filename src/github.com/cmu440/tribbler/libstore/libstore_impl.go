@@ -3,26 +3,26 @@ package libstore
 import (
 	"errors"
 
-	"github.com/cmu440/tribbler/rpc/storagerpc"
 	"github.com/cmu440/tribbler/rpc/librpc"
+	"github.com/cmu440/tribbler/rpc/storagerpc"
 	"net/rpc"
 	"time"
 )
 
 type value struct {
-	content string
+	content  string
 	contents []string
-	lease storagerpc.Lease
-	start time.Time
-	queries map[time.Time]bool
+	lease    storagerpc.Lease
+	start    time.Time
+	queries  map[time.Time]bool
 }
 
 type libstore struct {
 	// TODO: implement this!
-	mode LeaseMode  
-	client *rpc.Client
+	mode    LeaseMode
+	client  *rpc.Client
 	servers []storagerpc.Node
-	cache map[string]*value
+	cache   map[string]*value
 	clients map[string]*rpc.Client
 }
 
@@ -54,10 +54,10 @@ func NewLibstore(masterServerHostPort, myHostPort string, mode LeaseMode) (Libst
 	ls := new(libstore)
 	cli, err := rpc.DialHTTP("tcp", masterServerHostPort)
 	rpc.RegisterName("LeaseCallbacks", librpc.Wrap(ls))
-	if err != nil{
+	if err != nil {
 		return nil, err
 	}
-	ls.mode = mode 
+	ls.mode = mode
 	ls.client = cli
 	cache := make(map[string]*value)
 	ls.cache = cache
@@ -67,10 +67,10 @@ func NewLibstore(masterServerHostPort, myHostPort string, mode LeaseMode) (Libst
 	var reply storagerpc.GetServersReply
 	count := 0
 	err = ls.client.Call("StorageServer.GetServers", args, &reply)
-	if reply.Status == storagerpc.OK{
+	if reply.Status == storagerpc.OK {
 		ls.servers = reply.Servers
 	} else {
-		for (count < 5){
+		for count < 5 {
 			count += 1
 			time.Sleep(time.Duration(time.Second))
 			err = ls.client.Call("StorageServer.GetServers", args, &reply)
@@ -83,20 +83,20 @@ func NewLibstore(masterServerHostPort, myHostPort string, mode LeaseMode) (Libst
 			return nil, errors.New("server not ready")
 		}
 	}
-	return ls, err 
+	return ls, err
 }
 
 func (ls *libstore) Get(key string) (string, error) {
 	v, _, err := get(key, 0, ls)
-	return v, err 
+	return v, err
 }
 
 func (ls *libstore) Put(key, value string) error {
 	args := &storagerpc.PutArgs{key, value}
-	var reply storagerpc.PutReply 
+	var reply storagerpc.PutReply
 	ls.client.Call("StorageServer.Put", args, &reply)
 	if reply.Status == storagerpc.OK {
-		return nil 
+		return nil
 	} else {
 		return errors.New("not put")
 	}
@@ -104,10 +104,10 @@ func (ls *libstore) Put(key, value string) error {
 
 func (ls *libstore) Delete(key string) error {
 	args := &storagerpc.DeleteArgs{key}
-	var reply storagerpc.DeleteReply 
+	var reply storagerpc.DeleteReply
 	ls.client.Call("StorageServer.Delete", args, &reply)
 	if reply.Status == storagerpc.OK {
-		return nil 
+		return nil
 	} else {
 		return errors.New("not delete")
 	}
@@ -115,15 +115,15 @@ func (ls *libstore) Delete(key string) error {
 
 func (ls *libstore) GetList(key string) ([]string, error) {
 	_, v, err := get(key, 1, ls)
-	return v, err 
+	return v, err
 }
 
 func (ls *libstore) RemoveFromList(key, removeItem string) error {
 	args := &storagerpc.PutArgs{key, removeItem}
-	var reply storagerpc.PutReply 
+	var reply storagerpc.PutReply
 	ls.client.Call("StorageServer.RemoveFromList", args, &reply)
 	if reply.Status == storagerpc.OK {
-		return nil 
+		return nil
 	} else {
 		return errors.New("not RemoveFromList")
 	}
@@ -131,20 +131,20 @@ func (ls *libstore) RemoveFromList(key, removeItem string) error {
 
 func (ls *libstore) AppendToList(key, newItem string) error {
 	args := &storagerpc.PutArgs{key, newItem}
-	var reply storagerpc.PutReply 
+	var reply storagerpc.PutReply
 	ls.client.Call("StorageServer.AppendToList", args, &reply)
 	if reply.Status == storagerpc.OK {
-		return nil 
+		return nil
 	} else {
 		return errors.New("not AppendToList")
 	}
 }
 
 func (ls *libstore) RevokeLease(args *storagerpc.RevokeLeaseArgs, reply *storagerpc.RevokeLeaseReply) error {
-	key := args.Key 
+	key := args.Key
 	v, ok := ls.cache[key]
 	if ok == false {
-		reply.Status = storagerpc.KeyNotFound 
+		reply.Status = storagerpc.KeyNotFound
 	} else {
 		v.lease.ValidSeconds = 0
 		reply.Status = storagerpc.OK
@@ -154,32 +154,32 @@ func (ls *libstore) RevokeLease(args *storagerpc.RevokeLeaseArgs, reply *storage
 
 func findNode(key string, servers []storagerpc.Node) storagerpc.Node {
 	hash := StoreHash(key)
-	var min uint32 = 4294967295 
+	var min uint32 = 4294967295
 	var node storagerpc.Node = servers[0]
 	for _, item := range servers {
-		if item.NodeID - hash < min {
-			node = item 
-		} 
+		if item.NodeID-hash < min {
+			node = item
+		}
 	}
 	return node
 }
 
-func get(key string, queryType int, ls *libstore) (string, []string, error){
- 	v, ok := ls.cache[key]
- 	var valid float64
- 	if ok && v.lease.ValidSeconds != 0 {
- 		valid = float64(v.lease.ValidSeconds) - time.Now().Sub(v.start).Seconds()
- 	} else {
- 		valid = 0
- 	}
+func get(key string, queryType int, ls *libstore) (string, []string, error) {
+	v, ok := ls.cache[key]
+	var valid float64
+	if ok && v.lease.ValidSeconds != 0 {
+		valid = float64(v.lease.ValidSeconds) - time.Now().Sub(v.start).Seconds()
+	} else {
+		valid = 0
+	}
 	if ls.mode != Never && ok == true && valid > 0 && v.lease.Granted {
 		if queryType == 0 {
-			return v.content, nil, nil 
+			return v.content, nil, nil
 		} else {
 			return "", v.contents, nil
 		}
 	} else {
-		var n time.Time 
+		var n time.Time
 		if ls.mode != Never {
 			if ok == false {
 				ls.cache[key] = new(value)
@@ -187,7 +187,7 @@ func get(key string, queryType int, ls *libstore) (string, []string, error){
 			}
 			v = ls.cache[key]
 			n = time.Now()
-			v.queries[n] = true 
+			v.queries[n] = true
 		}
 		count := 0
 		if ls.mode == Normal {
@@ -205,16 +205,16 @@ func get(key string, queryType int, ls *libstore) (string, []string, error){
 		}
 		hostport := findNode(key, ls.servers).HostPort
 		cli, ok := ls.clients[hostport]
-		if ok == false{
+		if ok == false {
 			cli, _ = rpc.DialHTTP("tcp", hostport)
-			ls.clients[hostport] = cli 
-		} 
+			ls.clients[hostport] = cli
+		}
 		if count >= storagerpc.QueryCacheThresh {
 			args := &storagerpc.GetArgs{key, true, hostport}
-			if queryType == 0{
-				var reply storagerpc.GetReply 
+			if queryType == 0 {
+				var reply storagerpc.GetReply
 				err := cli.Call("StorageServer.Get", args, &reply)
-				if (reply.Status == storagerpc.OK){
+				if reply.Status == storagerpc.OK {
 					v.content = reply.Value
 					v.lease = reply.Lease
 					v.start = time.Now()
@@ -223,36 +223,36 @@ func get(key string, queryType int, ls *libstore) (string, []string, error){
 				}
 				return reply.Value, nil, err
 			} else {
-				var reply storagerpc.GetListReply 
+				var reply storagerpc.GetListReply
 				err := cli.Call("StorageServer.GetList", args, &reply)
-				if (reply.Status == storagerpc.OK){
+				if reply.Status == storagerpc.OK {
 					v.contents = reply.Value
 					v.lease = reply.Lease
 					v.start = time.Now()
 				} else {
 					return "", reply.Value, errors.New("not get list")
 				}
-				return "", reply.Value, err 
+				return "", reply.Value, err
 			}
 		} else {
 			args := &storagerpc.GetArgs{key, false, hostport}
-			if queryType == 0{
-				var reply storagerpc.GetReply 
+			if queryType == 0 {
+				var reply storagerpc.GetReply
 				err := ls.client.Call("StorageServer.Get", args, &reply)
-				if reply.Status == storagerpc.OK{	
+				if reply.Status == storagerpc.OK {
 					return reply.Value, nil, err
 				} else {
 					return reply.Value, nil, errors.New("not get")
 				}
 			} else {
-				var reply storagerpc.GetListReply 
+				var reply storagerpc.GetListReply
 				err := ls.client.Call("StorageServer.GetList", args, &reply)
 				if reply.Status == storagerpc.OK {
 					return "", reply.Value, err
 				} else {
 					return "", reply.Value, errors.New("not get list")
-				}			
-			}	
+				}
+			}
 		}
 	}
 }

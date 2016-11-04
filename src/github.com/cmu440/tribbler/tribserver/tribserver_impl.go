@@ -1,21 +1,20 @@
 package tribserver
 
 import (
-
-	"github.com/cmu440/tribbler/rpc/tribrpc"
-	"github.com/cmu440/tribbler/util"  
-	"github.com/cmu440/tribbler/libstore"                
-    "net/rpc"
-	"net/http"  
-	"net"                                                                                                                                                                                                                                                                                                       
-	"time"
-	"encoding/json"
 	"bytes"
+	"encoding/json"
+	"github.com/cmu440/tribbler/libstore"
+	"github.com/cmu440/tribbler/rpc/tribrpc"
+	"github.com/cmu440/tribbler/util"
+	"net"
+	"net/http"
+	"net/rpc"
+	"time"
 )
 
 type tribServer struct {
 	// TODO: implement this!
-	ls libstore.Libstore
+	ls       libstore.Libstore
 	postTime int64
 }
 
@@ -26,44 +25,44 @@ type tribServer struct {
 //
 // For hints on how to properly setup RPC, see the rpc/tribrpc package.
 func NewTribServer(masterServerHostPort, myHostPort string) (TribServer, error) {
-    tribServer := new(tribServer)
-    ls, err := libstore.NewLibstore(masterServerHostPort, myHostPort, libstore.Never)
-    if err != nil {
-    	return nil, err
-    }
-    tribServer.ls = ls
-    tribServer.postTime = 0
-    // Create the server socket that will listen for incoming RPCs.
-    listener, err := net.Listen("tcp", myHostPort)
-    if err != nil {
-        return nil, err
-    }
+	tribServer := new(tribServer)
+	ls, err := libstore.NewLibstore(masterServerHostPort, myHostPort, libstore.Never)
+	if err != nil {
+		return nil, err
+	}
+	tribServer.ls = ls
+	tribServer.postTime = 0
+	// Create the server socket that will listen for incoming RPCs.
+	listener, err := net.Listen("tcp", myHostPort)
+	if err != nil {
+		return nil, err
+	}
 
-    // Wrap the tribServer before registering it for RPC.
-    err = rpc.RegisterName("TribServer", tribrpc.Wrap(tribServer))
-    if err != nil {
-        return nil, err
-    }
+	// Wrap the tribServer before registering it for RPC.
+	err = rpc.RegisterName("TribServer", tribrpc.Wrap(tribServer))
+	if err != nil {
+		return nil, err
+	}
 
-    // Setup the HTTP handler that will server incoming RPCs and
-    // serve requests in a background goroutine.
-    rpc.HandleHTTP()
-    go http.Serve(listener, nil)
+	// Setup the HTTP handler that will server incoming RPCs and
+	// serve requests in a background goroutine.
+	rpc.HandleHTTP()
+	go http.Serve(listener, nil)
 
-    return tribServer, nil
+	return tribServer, nil
 }
 
 //map user to its list of friends
 func (ts *tribServer) CreateUser(args *tribrpc.CreateUserArgs, reply *tribrpc.CreateUserReply) error {
 	s := util.FormatUserKey(args.UserID)
-	_, err := ts.ls.GetList(s)	
+	_, err := ts.ls.GetList(s)
 	if err == nil {
 		reply.Status = tribrpc.Exists
 		return nil
 	} else {
 		err = ts.ls.AppendToList(s, "")
 		reply.Status = tribrpc.OK
-		return err 
+		return err
 	}
 }
 
@@ -72,19 +71,19 @@ func (ts *tribServer) AddSubscription(args *tribrpc.SubscriptionArgs, reply *tri
 	tid := util.FormatUserKey(args.TargetUserID)
 	_, err1 := ts.ls.GetList(id)
 	_, err2 := ts.ls.GetList(tid)
-	var err error 
+	var err error
 	if err1 != nil {
 		reply.Status = tribrpc.NoSuchUser
 	} else if err2 != nil {
 		reply.Status = tribrpc.NoSuchTargetUser
 	} else {
 		lid := util.FormatSubListKey(args.UserID)
-		//add and then put 
+		//add and then put
 		l, _ := ts.ls.GetList(lid)
 		for _, str := range l {
 			if bytes.Compare([]byte(str), []byte(args.TargetUserID)) == 0 {
 				reply.Status = tribrpc.Exists
-				return err 
+				return err
 			}
 		}
 		err = ts.ls.AppendToList(lid, args.TargetUserID)
@@ -96,16 +95,16 @@ func (ts *tribServer) AddSubscription(args *tribrpc.SubscriptionArgs, reply *tri
 				ts.ls.AppendToList(id, args.TargetUserID)
 				ts.ls.AppendToList(tid, args.UserID)
 				break
-			}			
+			}
 		}
-	}	
+	}
 	return err
 }
 
 func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *tribrpc.SubscriptionReply) error {
 	id := util.FormatUserKey(args.UserID)
 	tid := util.FormatUserKey(args.TargetUserID)
-	var err error 
+	var err error
 	_, err1 := ts.ls.GetList(id)
 	l2, err2 := ts.ls.GetList(tid)
 	if err1 != nil {
@@ -114,11 +113,11 @@ func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *
 		reply.Status = tribrpc.NoSuchTargetUser
 	} else {
 		lid := util.FormatSubListKey(args.UserID)
-		//remove and then put 
+		//remove and then put
 		l, _ := ts.ls.GetList(lid)
 		for _, str := range l {
 			if bytes.Compare([]byte(str), []byte(args.TargetUserID)) == 0 {
-				reply.Status = tribrpc.OK 
+				reply.Status = tribrpc.OK
 				err := ts.ls.RemoveFromList(lid, args.TargetUserID)
 				for _, str2 := range l2 {
 					if bytes.Compare([]byte(str2), []byte(args.UserID)) == 0 {
@@ -127,12 +126,12 @@ func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *
 						break
 					}
 				}
-				return err 
+				return err
 			}
 		}
 		reply.Status = tribrpc.NoSuchTargetUser
 	}
-	return err 
+	return err
 }
 
 func (ts *tribServer) GetFriends(args *tribrpc.GetFriendsArgs, reply *tribrpc.GetFriendsReply) error {
@@ -157,28 +156,28 @@ func (ts *tribServer) PostTribble(args *tribrpc.PostTribbleArgs, reply *tribrpc.
 		reply.PostKey = util.FormatPostKey(args.UserID, ts.postTime)
 		ts.postTime += 1
 		_, err = ts.ls.Get(reply.PostKey)
-	} 
+	}
 	_, err = ts.ls.GetList(util.FormatUserKey(args.UserID))
 	if err != nil {
 		reply.Status = tribrpc.NoSuchUser
-		return nil 
+		return nil
 	}
 	t := new(tribrpc.Tribble)
-	t.UserID = args.UserID 
+	t.UserID = args.UserID
 	t.Posted = time.Now()
-	t.Contents = args.Contents 
-	b, _ := json.Marshal(t) 
+	t.Contents = args.Contents
+	b, _ := json.Marshal(t)
 	err = ts.ls.Put(reply.PostKey, string(b))
 	ts.ls.AppendToList(util.FormatTribListKey(args.UserID), reply.PostKey)
 	reply.Status = tribrpc.OK
-	return err 
+	return err
 }
 
 func (ts *tribServer) DeleteTribble(args *tribrpc.DeleteTribbleArgs, reply *tribrpc.DeleteTribbleReply) error {
 	_, err2 := ts.ls.GetList(util.FormatUserKey(args.UserID))
 	if err2 != nil {
 		reply.Status = tribrpc.NoSuchUser
-		return nil 
+		return nil
 	}
 	_, err3 := ts.ls.Get(args.PostKey)
 	if err3 != nil {
@@ -193,7 +192,7 @@ func (ts *tribServer) DeleteTribble(args *tribrpc.DeleteTribbleArgs, reply *trib
 		reply.Status = tribrpc.OK
 		ts.ls.RemoveFromList(util.FormatTribListKey(args.UserID), args.PostKey)
 	}
-	return err 
+	return err
 }
 
 func (ts *tribServer) GetTribbles(args *tribrpc.GetTribblesArgs, reply *tribrpc.GetTribblesReply) error {
@@ -204,10 +203,10 @@ func (ts *tribServer) GetTribbles(args *tribrpc.GetTribblesArgs, reply *tribrpc.
 	}
 	k := util.FormatTribListKey(args.UserID)
 	l, err := ts.ls.GetList(k)
-	if len(l) == 0{
+	if len(l) == 0 {
 		reply.Tribbles = nil
-		reply.Status = tribrpc.OK	
-		return nil 	
+		reply.Status = tribrpc.OK
+		return nil
 	}
 	tribs := sortList(l, ts)
 	reply.Tribbles = tribs
@@ -223,7 +222,7 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 	}
 	k := util.FormatSubListKey(args.UserID)
 	l, err := ts.ls.GetList(k)
-	if (err != nil){
+	if err != nil {
 		reply.Status = tribrpc.OK
 		return nil
 	}
@@ -232,33 +231,33 @@ func (ts *tribServer) GetTribblesBySubscription(args *tribrpc.GetTribblesArgs, r
 	tribLists := make([][]tribrpc.Tribble, len(l))
 	nonempty := 0
 	j := 0
-	for (j < len(l)){
+	for j < len(l) {
 		k := util.FormatTribListKey(l[j])
 		tl, err := ts.ls.GetList(k)
 		tribLists[j] = sortList(tl, ts)
-		if err == nil && len(tribLists[j]) > 0{
-			nonempty += 1 
+		if err == nil && len(tribLists[j]) > 0 {
+			nonempty += 1
 			latest[j] = tribLists[j][0]
 			tribLists[j] = tribLists[j][1:]
 		}
 		j += 1
 	}
 	i := 0
-	for (i < 100 && nonempty > 0){
+	for i < 100 && nonempty > 0 {
 		var min tribrpc.Tribble
 		index := 0
 		j = 0
-		for (j < len(latest)) {
+		for j < len(latest) {
 			t := latest[j]
 			if len(t.UserID) != 0 && (len(min.UserID) == 0 || t.Posted.After(min.Posted)) {
-				min = t 
+				min = t
 				index = j
 			}
 			j += 1
 		}
-		tribs[i] = min 
-		//replace the index-th 
-		if (len(tribLists[index]) > 0){
+		tribs[i] = min
+		//replace the index-th
+		if len(tribLists[index]) > 0 {
 			latest[index] = tribLists[index][0]
 			tribLists[index] = tribLists[index][1:]
 		} else {
@@ -277,34 +276,36 @@ func sortList(l []string, ts *tribServer) []tribrpc.Tribble {
 	i := 0
 	//sort l
 	for s1, t1 := range l {
-		var minT tribrpc.Tribble 
+		var minT tribrpc.Tribble
 		s, err := ts.ls.Get(t1)
 		if err == nil {
 			json.Unmarshal([]byte(s), &minT)
 		} else {
-			continue 
+			continue
 		}
-		index := s1 
+		index := s1
 		for s2, t2 := range l {
-			if s2 < s1 {continue}
-			var t tribrpc.Tribble 
+			if s2 < s1 {
+				continue
+			}
+			var t tribrpc.Tribble
 			s, err := ts.ls.Get(t2)
 			if err == nil {
 				json.Unmarshal([]byte(s), &t)
-				if t.Posted.After(minT.Posted){
-					minT = t 
-					index = s2 
+				if t.Posted.After(minT.Posted) {
+					minT = t
+					index = s2
 				}
 			}
 		}
-		tribs[i] = minT 
+		tribs[i] = minT
 		temp := l[index]
 		l[index] = l[s1]
 		l[s1] = temp
 		i += 1
 		if i >= 100 {
-			break 
-		}		
+			break
+		}
 	}
 	return tribs[:i]
 
