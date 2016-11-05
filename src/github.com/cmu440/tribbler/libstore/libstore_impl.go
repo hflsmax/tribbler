@@ -3,6 +3,7 @@ package libstore
 import (
 	"errors"
 
+
 	"container/list"
 	"github.com/cmu440/tribbler/rpc/librpc"
 	"github.com/cmu440/tribbler/rpc/storagerpc"
@@ -89,6 +90,7 @@ func NewLibstore(masterServerHostPort, myHostPort string, mode LeaseMode) (Libst
 			return nil, errors.New("server not ready")
 		}
 	}
+
 	go cleanCache(ls)
 	return ls, err
 }
