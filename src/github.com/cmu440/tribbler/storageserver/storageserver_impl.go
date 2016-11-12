@@ -10,7 +10,6 @@ import (
 	"strings"
 	"hash/fnv"
 	"github.com/cmu440/tribbler/rpc/storagerpc"
-	"fmt"
 )
 
 type callbackWithID struct {
@@ -124,6 +123,7 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 	return ss, nil
 }
 
+// Check if this server recieves correct key
 func isCorrectNode(ss *storageServer, key string) bool {
 	hash := StoreHash(key)
 	var min uint32 = 4294967295
@@ -185,10 +185,8 @@ func (ss *storageServer) GetServers(args *storagerpc.GetServersArgs, reply *stor
 func installLease(val *value, hostPort string) {
 	leaseExpire := func(val *value, idToRemove int) {
 		time.Sleep(time.Second*(storagerpc.LeaseSeconds+storagerpc.LeaseGuardSeconds))
-		fmt.Println("TIME TO REMOVE")
 		for _, cb := range val.callbacks.list {
 			if cb.ID == idToRemove{
-				fmt.Println("FOUND")
 				cb.valid = false
 				break
 			}
@@ -197,7 +195,6 @@ func installLease(val *value, hostPort string) {
 	val.callbacks.Lock()
 	val.callbacks.cbID += 1
 	id := val.callbacks.cbID
-	fmt.Println("installed")
 	val.callbacks.list = append(val.callbacks.list, &callbackWithID{ID: id, hostPort: hostPort, valid: true})
 	go leaseExpire(val, id)
 	val.callbacks.Unlock()
@@ -208,26 +205,21 @@ func (ss *storageServer) Get(args *storagerpc.GetArgs, reply *storagerpc.GetRepl
 		reply.Status = storagerpc.WrongServer
 		return nil
 	}
-	fmt.Println("get ", args.Key)
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
 		ss.storage.RUnlock()
-		fmt.Println("get 1")
 		val.RLock()
-		fmt.Println("get 2")
 		if !val.live {
 			reply.Status = storagerpc.KeyNotFound
 		} else {
 			reply.Status = storagerpc.OK
 			if args.WantLease {
 				if !val.revoking {
-					fmt.Println("get 3")
 					installLease(val, args.HostPort)
 					reply.Lease = storagerpc.Lease{
 						Granted: true,
 						ValidSeconds: storagerpc.LeaseSeconds}
 				} else {
-					fmt.Println("get 4")
 					reply.Lease = storagerpc.Lease{Granted: false}
 				}
 			}
@@ -238,14 +230,11 @@ func (ss *storageServer) Get(args *storagerpc.GetArgs, reply *storagerpc.GetRepl
 		ss.storage.RUnlock()
 		reply.Status = storagerpc.KeyNotFound
 	}
-	fmt.Println("get 5")
 	return nil
 }
 
 func revokeLeases(val *value, key string) {
-	fmt.Println("revokeLeases ", key)
 	val.callbacks.Lock()
-	fmt.Println(val.callbacks.list)
 	revoked := make(chan bool)
 	for _, cb := range val.callbacks.list {
 		go func(cb *callbackWithID) {
@@ -256,7 +245,6 @@ func revokeLeases(val *value, key string) {
 			var reply storagerpc.RevokeLeaseReply
 			exitFor := false
 			for ;cb.valid && !exitFor ; {
-				fmt.Println("TO REVOKE")
 				cli.Go("LeaseCallbacks.RevokeLease", args, &reply, done)
 				select {
 				case <- time.After(time.Second):
@@ -264,13 +252,13 @@ func revokeLeases(val *value, key string) {
 					exitFor = true
 				}
 			}
-			fmt.Println("REVOKE DONE")
 			revoked <- true
 		}(cb)
 	}
+
+	// Wait till all callbacks are revoked or expired
 	for _ = range val.callbacks.list {
 		<- revoked
-		fmt.Println("foor received")
 	}
 
 	val.callbacks.list = make([]*callbackWithID, 0)
@@ -283,7 +271,6 @@ func (ss *storageServer) Put(args *storagerpc.PutArgs, reply *storagerpc.PutRepl
 		return nil
 	}
 
-	fmt.Println("put ", args.Key, args.Value)
 
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
@@ -318,7 +305,6 @@ func (ss *storageServer) Delete(args *storagerpc.DeleteArgs, reply *storagerpc.D
 		reply.Status = storagerpc.WrongServer
 		return nil
 	}
-	fmt.Println("delete ", args.Key)
 
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
@@ -349,7 +335,6 @@ func (ss *storageServer) GetList(args *storagerpc.GetArgs, reply *storagerpc.Get
 		reply.Status = storagerpc.WrongServer
 		return nil
 	}
-	fmt.Println("getlist ", args.Key)
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
 		ss.storage.RUnlock()
@@ -384,7 +369,6 @@ func (ss *storageServer) AppendToList(args *storagerpc.PutArgs, reply *storagerp
 		return nil
 	}
 
-	fmt.Println("AppendToList ", args.Key, args.Value)
 
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
@@ -396,7 +380,19 @@ func (ss *storageServer) AppendToList(args *storagerpc.PutArgs, reply *storagerp
 		revokeLeases(val, args.Key)//block; not locked, so can be read
 
 		val.Lock()
-		val.value = append(val.value.([]string), args.Value)
+		alreadyExist := false
+		for _, v := range(val.value.([]string)) {
+			if v == args.Value {
+				alreadyExist = true
+				break
+			}
+		}
+		if alreadyExist {
+			reply.Status = storagerpc.ItemExists
+		} else {
+			val.value = append(val.value.([]string), args.Value)
+			reply.Status = storagerpc.OK
+		}
 		val.revoking = false
 		val.Unlock()
 	} else {
@@ -408,8 +404,9 @@ func (ss *storageServer) AppendToList(args *storagerpc.PutArgs, reply *storagerp
 			live: true,
 			revoking: false}
 		ss.storage.Unlock()
+		reply.Status = storagerpc.OK
 	}
-	reply.Status = storagerpc.OK
+
 
 	return nil
 }
@@ -419,7 +416,6 @@ func (ss *storageServer) RemoveFromList(args *storagerpc.PutArgs, reply *storage
 		reply.Status = storagerpc.WrongServer
 		return nil
 	}
-	fmt.Println("RemoveFromList ", args.Key)
 
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
@@ -439,6 +435,7 @@ func (ss *storageServer) RemoveFromList(args *storagerpc.PutArgs, reply *storage
 				break
 			}
 		}
+
 		if iToRemove != -1 {
 			l := val.value.([]string)
 			val.value = append(l[:iToRemove], l[iToRemove+1:]...)
