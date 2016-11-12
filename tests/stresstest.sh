@@ -41,15 +41,15 @@ TRIB_SERVER=$GOPATH/bin/trunner
 function startStorageServers {
     N=${#STORAGE_ID[@]}
     # Start master storage server.
-    ${STORAGE_SERVER} -N=${N} -id=${STORAGE_ID[0]} -port=${STORAGE_PORT} &> /dev/null &
+    ${STORAGE_SERVER} -N=${N} -id=${STORAGE_ID[0]} -port=${STORAGE_PORT} :'&>  /dev/null ' &
     STORAGE_SERVER_PID[0]=$!
     # Start slave storage servers.
     if [ "$N" -gt 1 ]
     then
         for i in `seq 1 $((N - 1))`
         do
-	    STORAGE_SLAVE_PORT=$(((RANDOM % 10000) + 10000))
-            ${STORAGE_SERVER} -port=${STORAGE_SLAVE_PORT} -id=${STORAGE_ID[$i]} -master="localhost:${STORAGE_PORT}" &> /dev/null &
+        STORAGE_SLAVE_PORT=$(((RANDOM % 10000) + 10000))
+            ${STORAGE_SERVER} -port=${STORAGE_SLAVE_PORT} -id=${STORAGE_ID[$i]} -master="localhost:${STORAGE_PORT}" :'&> /dev/null' &
             STORAGE_SERVER_PID[$i]=$!
         done
     fi
@@ -70,7 +70,7 @@ function startTribServers {
     do
         # Pick random port between [10000, 20000).
         TRIB_PORT[$i]=$(((RANDOM % 10000) + 10000))
-        ${TRIB_SERVER} -port=${TRIB_PORT[$i]} "localhost:${STORAGE_PORT}" &> /dev/null &
+        ${TRIB_SERVER} -port=${TRIB_PORT[$i]} "localhost:${STORAGE_PORT}" :'&> /dev/null' &
         TRIB_SERVER_PID[$i]=$!
     done
     sleep 5
@@ -109,7 +109,7 @@ function testStress {
     FAIL=0
     for i in `seq 0 $((C - 1))`
     do
-        wait ${STRESS_CLIENT_PID[$i]} 2> /dev/null
+        wait ${STRESS_CLIENT_PID[$i]} #2> /dev/null
         if [ "$?" -ne 7 ]
         then
             FAIL=$((FAIL + 1))
