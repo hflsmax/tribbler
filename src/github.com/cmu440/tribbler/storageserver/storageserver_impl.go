@@ -238,7 +238,10 @@ func revokeLeases(val *value, key string) {
 	for _, cb := range val.callbacks.list {
 		go func(cb *callbackWithID) {
 			done := make(chan *rpc.Call, 1)
-			cli, _ := rpc.DialHTTP("tcp", cb.hostPort)
+			cli, err := rpc.DialHTTP("tcp", cb.hostPort)
+			for err != nil {
+				cli, err = rpc.DialHTTP("tcp", cb.hostPort)
+			}
 			args := &storagerpc.RevokeLeaseArgs{}
 			args.Key = key
 			var reply storagerpc.RevokeLeaseReply

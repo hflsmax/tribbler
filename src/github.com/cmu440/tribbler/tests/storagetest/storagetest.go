@@ -1408,29 +1408,8 @@ func testDelayedRevokeListWithUpdate3() {
 func main() {
 	jtests := []testFunc{{"testInitStorageServers", testInitStorageServers}}
 	btests := []testFunc{
-		{"testPutGetDelete", testPutGetDelete},
-		{"testAppendGetRemoveList", testAppendGetRemoveList},
-		{"testUpdateWithoutLease", testUpdateWithoutLease},
-		{"testUpdateBeforeLeaseExpire", testUpdateBeforeLeaseExpire},
-		{"testUpdateAfterLeaseExpire", testUpdateAfterLeaseExpire},
-		{"testDeleteBeforeLeaseExpire", testDeleteBeforeLeaseExpire},
-		{"testDeleteAfterLeaseExpire", testDeleteAfterLeaseExpire},
-		{"testDeleteWithoutLease", testDeleteWithoutLease},
-		{"testDelayedRevokeWithoutBlocking", testDelayedRevokeWithoutBlocking},
-		{"testDelayedRevokeWithLeaseRequest1", testDelayedRevokeWithLeaseRequest1},
-		{"testDelayedRevokeWithLeaseRequest2", testDelayedRevokeWithLeaseRequest2},
-		{"testDelayedRevokeWithUpdate1", testDelayedRevokeWithUpdate1},
-		{"testDelayedRevokeWithUpdate2", testDelayedRevokeWithUpdate2},
-		{"testDelayedRevokeWithUpdate3", testDelayedRevokeWithUpdate3},
-		{"testUpdateListWithoutLease", testUpdateListWithoutLease},
-		{"testUpdateListBeforeLeaseExpire", testUpdateListBeforeLeaseExpire},
-		{"testUpdateListAfterLeaseExpire", testUpdateListAfterLeaseExpire},
-		{"testDelayedRevokeListWithoutBlocking", testDelayedRevokeListWithoutBlocking},
-		{"testDelayedRevokeListWithLeaseRequest1", testDelayedRevokeListWithLeaseRequest1},
-		{"testDelayedRevokeListWithLeaseRequest2", testDelayedRevokeListWithLeaseRequest2},
+
 		{"testDelayedRevokeListWithUpdate1", testDelayedRevokeListWithUpdate1},
-		{"testDelayedRevokeListWithUpdate2", testDelayedRevokeListWithUpdate2},
-		{"testDelayedRevokeListWithUpdate3", testDelayedRevokeListWithUpdate3},
 	}
 
 	flag.Parse()
