@@ -75,11 +75,14 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 		}
 		args := &storagerpc.RegisterArgs{
 			ServerInfo: storagerpc.Node{
-				HostPort: "127.0.0.1:" + strconv.Itoa(port),
+				HostPort: "localhost:" + strconv.Itoa(port),
 				NodeID:   nodeID}}
 		var reply storagerpc.RegisterReply
 		for {
-			err = cli.Call("StorageSrver.RegisterServer", args, &reply)
+			err = cli.Call("StorageServer.RegisterServer", args, &reply)
+			if err != nil {
+				return nil, err
+			}
 			if reply.Status == storagerpc.OK {
 				ss.servers = reply.Servers
 				break
@@ -87,7 +90,7 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 			time.Sleep(time.Second)
 		}
 
-		listener, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		listener, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 		if err != nil {
 			return nil, err
 		}
@@ -101,12 +104,12 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 	} else {
 		// This is a master
 		ss.servers = []storagerpc.Node{storagerpc.Node{
-			HostPort: "127.0.0.1:" + strconv.Itoa(port),
+			HostPort: "localhost:" + strconv.Itoa(port),
 			NodeID:   nodeID}}
 		ss.numNodes = numNodes
 		ss.allRegisterNotify = make(chan bool)
 
-		listener, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+		listener, err := net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 		if err != nil {
 			return nil, err
 		}
@@ -116,8 +119,9 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 		}
 		rpc.HandleHTTP()
 		go http.Serve(listener, nil)
-
-		<-ss.allRegisterNotify
+		if numNodes > 1 {
+			<-ss.allRegisterNotify
+		}
 	}
 	return ss, nil
 }
