@@ -300,28 +300,6 @@ func (ss *storageServer) Put(args *storagerpc.PutArgs, reply *storagerpc.PutRepl
 	return nil
 }
 
-func revokeLeases(ss *storageServer, key string) error {
-	ss.storage[key].callbacks.Lock()
-	for _, cb := range ss.storage[key].callbacks.list {
-		cli, err := rpc.DialHTTP("tcp", cb.hostPort)
-		if err != nil {
-			ss.storage[key].callbacks.Unlock()
-			return err
-		}
-		args := &storagerpc.RevokeLeaseArgs{}
-		args.Key = key
-		var reply storagerpc.RevokeLeaseReply
-		err = cli.Call("LeaseCallbacks.RevokeLease", args, &reply)
-		if err != nil {
-			ss.storage[key].callbacks.Unlock()
-			return err
-		}
-	}
-	ss.storage[key].callbacks.list = make([]callbackWithID,0)
-	ss.storage[key].callbacks.Unlock()
-	return nil
-}
-
 func (ss *storageServer) Delete(args *storagerpc.DeleteArgs, reply *storagerpc.DeleteReply) error {
 	if !isCorrectNode(ss, args.Key) {
 		reply.Status = storagerpc.WrongServer
