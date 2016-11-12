@@ -3,7 +3,6 @@ package libstore
 import (
 	"errors"
 
-
 	"container/list"
 	"github.com/cmu440/tribbler/rpc/librpc"
 	"github.com/cmu440/tribbler/rpc/storagerpc"

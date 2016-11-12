@@ -1,20 +1,20 @@
 package storageserver
 
 import (
+	"github.com/cmu440/tribbler/rpc/storagerpc"
+	"hash/fnv"
 	"net"
 	"net/http"
 	"net/rpc"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
-	"strings"
-	"hash/fnv"
-	"github.com/cmu440/tribbler/rpc/storagerpc"
 )
 
 type callbackWithID struct {
-	valid bool
-	ID int
+	valid    bool
+	ID       int
 	hostPort string
 }
 
@@ -26,24 +26,23 @@ type callbacks struct {
 
 type value struct {
 	sync.RWMutex
-	value interface{}
+	value     interface{}
 	callbacks callbacks
-	revoking bool
-	live bool
+	revoking  bool
+	live      bool
 }
 
 type storageServer struct {
-	storage struct{
+	storage struct {
 		sync.RWMutex
 		m map[string]*value
 	}
-	servers []storagerpc.Node
-	serversMutex *sync.Mutex
-	numNodes int
+	servers           []storagerpc.Node
+	serversMutex      *sync.Mutex
+	numNodes          int
 	allRegisterNotify chan bool
-	nodeID uint32
+	nodeID            uint32
 }
-
 
 // StoreHash hashes a string key and returns a 32-bit integer. This function
 // is provided here so that all implementations use the same hashing mechanism
@@ -141,8 +140,6 @@ func isCorrectNode(ss *storageServer, key string) bool {
 	}
 }
 
-
-
 func (ss *storageServer) RegisterServer(args *storagerpc.RegisterArgs, reply *storagerpc.RegisterReply) error {
 	ss.serversMutex.Lock()
 	if len(ss.servers) == ss.numNodes {
@@ -184,9 +181,9 @@ func (ss *storageServer) GetServers(args *storagerpc.GetServersArgs, reply *stor
 
 func installLease(val *value, hostPort string) {
 	leaseExpire := func(val *value, idToRemove int) {
-		time.Sleep(time.Second*(storagerpc.LeaseSeconds+storagerpc.LeaseGuardSeconds))
+		time.Sleep(time.Second * (storagerpc.LeaseSeconds + storagerpc.LeaseGuardSeconds))
 		for _, cb := range val.callbacks.list {
-			if cb.ID == idToRemove{
+			if cb.ID == idToRemove {
 				cb.valid = false
 				break
 			}
@@ -217,7 +214,7 @@ func (ss *storageServer) Get(args *storagerpc.GetArgs, reply *storagerpc.GetRepl
 				if !val.revoking {
 					installLease(val, args.HostPort)
 					reply.Lease = storagerpc.Lease{
-						Granted: true,
+						Granted:      true,
 						ValidSeconds: storagerpc.LeaseSeconds}
 				} else {
 					reply.Lease = storagerpc.Lease{Granted: false}
@@ -244,11 +241,11 @@ func revokeLeases(val *value, key string) {
 			args.Key = key
 			var reply storagerpc.RevokeLeaseReply
 			exitFor := false
-			for ;cb.valid && !exitFor ; {
+			for cb.valid && !exitFor {
 				cli.Go("LeaseCallbacks.RevokeLease", args, &reply, done)
 				select {
-				case <- time.After(time.Second):
-				case <- done:
+				case <-time.After(time.Second):
+				case <-done:
 					exitFor = true
 				}
 			}
@@ -258,7 +255,7 @@ func revokeLeases(val *value, key string) {
 
 	// Wait till all callbacks are revoked or expired
 	for _ = range val.callbacks.list {
-		<- revoked
+		<-revoked
 	}
 
 	val.callbacks.list = make([]*callbackWithID, 0)
@@ -271,7 +268,6 @@ func (ss *storageServer) Put(args *storagerpc.PutArgs, reply *storagerpc.PutRepl
 		return nil
 	}
 
-
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
 		ss.storage.RUnlock()
@@ -279,7 +275,7 @@ func (ss *storageServer) Put(args *storagerpc.PutArgs, reply *storagerpc.PutRepl
 		val.revoking = true
 		val.Unlock()
 
-		revokeLeases(val, args.Key)//block; not locked, so can be read
+		revokeLeases(val, args.Key) //block; not locked, so can be read
 
 		val.Lock()
 		val.value = args.Value
@@ -289,10 +285,10 @@ func (ss *storageServer) Put(args *storagerpc.PutArgs, reply *storagerpc.PutRepl
 		ss.storage.RUnlock()
 		ss.storage.Lock()
 		ss.storage.m[args.Key] = &value{
-			value: args.Value,
+			value:     args.Value,
 			callbacks: callbacks{cbID: 0, list: make([]*callbackWithID, 0)},
-			live: true,
-			revoking: false}
+			live:      true,
+			revoking:  false}
 		ss.storage.Unlock()
 	}
 	reply.Status = storagerpc.OK
@@ -313,7 +309,7 @@ func (ss *storageServer) Delete(args *storagerpc.DeleteArgs, reply *storagerpc.D
 		val.revoking = true
 		val.Unlock()
 
-		revokeLeases(val, args.Key)// not locked, so can be read
+		revokeLeases(val, args.Key) // not locked, so can be read
 
 		val.Lock()
 		ss.storage.Lock()
@@ -347,7 +343,7 @@ func (ss *storageServer) GetList(args *storagerpc.GetArgs, reply *storagerpc.Get
 				if !val.revoking {
 					installLease(val, args.HostPort)
 					reply.Lease = storagerpc.Lease{
-						Granted: true,
+						Granted:      true,
 						ValidSeconds: storagerpc.LeaseSeconds}
 				} else {
 					reply.Lease = storagerpc.Lease{Granted: false}
@@ -369,7 +365,6 @@ func (ss *storageServer) AppendToList(args *storagerpc.PutArgs, reply *storagerp
 		return nil
 	}
 
-
 	ss.storage.RLock()
 	if val, ok := ss.storage.m[args.Key]; ok {
 		ss.storage.RUnlock()
@@ -377,11 +372,11 @@ func (ss *storageServer) AppendToList(args *storagerpc.PutArgs, reply *storagerp
 		val.revoking = true
 		val.Unlock()
 
-		revokeLeases(val, args.Key)//block; not locked, so can be read
+		revokeLeases(val, args.Key) //block; not locked, so can be read
 
 		val.Lock()
 		alreadyExist := false
-		for _, v := range(val.value.([]string)) {
+		for _, v := range val.value.([]string) {
 			if v == args.Value {
 				alreadyExist = true
 				break
@@ -399,14 +394,13 @@ func (ss *storageServer) AppendToList(args *storagerpc.PutArgs, reply *storagerp
 		ss.storage.RUnlock()
 		ss.storage.Lock()
 		ss.storage.m[args.Key] = &value{
-			value: []string{args.Value},
+			value:     []string{args.Value},
 			callbacks: callbacks{cbID: 0, list: make([]*callbackWithID, 0)},
-			live: true,
-			revoking: false}
+			live:      true,
+			revoking:  false}
 		ss.storage.Unlock()
 		reply.Status = storagerpc.OK
 	}
-
 
 	return nil
 }
@@ -424,12 +418,12 @@ func (ss *storageServer) RemoveFromList(args *storagerpc.PutArgs, reply *storage
 		val.revoking = true
 		val.Unlock()
 
-		revokeLeases(val, args.Key)// not locked, so can be read
+		revokeLeases(val, args.Key) // not locked, so can be read
 
 		val.Lock()
 
 		iToRemove := -1
-		for i, v := range(val.value.([]string)) {
+		for i, v := range val.value.([]string) {
 			if v == args.Value {
 				iToRemove = i
 				break
