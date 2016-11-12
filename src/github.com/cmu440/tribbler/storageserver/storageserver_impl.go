@@ -70,8 +70,8 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 	if masterServerHostPort != "" {
 		// This is a slave
 		cli, err := rpc.DialHTTP("tcp", masterServerHostPort)
-		if err != nil {
-			return nil, err
+		for err != nil {
+			cli, err = rpc.DialHTTP("tcp", masterServerHostPort)
 		}
 		args := &storagerpc.RegisterArgs{
 			ServerInfo: storagerpc.Node{
@@ -80,9 +80,6 @@ func NewStorageServer(masterServerHostPort string, numNodes, port int, nodeID ui
 		var reply storagerpc.RegisterReply
 		for {
 			err = cli.Call("StorageServer.RegisterServer", args, &reply)
-			if err != nil {
-				return nil, err
-			}
 			if reply.Status == storagerpc.OK {
 				ss.servers = reply.Servers
 				break
@@ -146,6 +143,7 @@ func isCorrectNode(ss *storageServer, key string) bool {
 
 func (ss *storageServer) RegisterServer(args *storagerpc.RegisterArgs, reply *storagerpc.RegisterReply) error {
 	ss.serversMutex.Lock()
+
 	if len(ss.servers) == ss.numNodes {
 		reply.Status = storagerpc.OK
 		reply.Servers = ss.servers
