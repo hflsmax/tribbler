@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"net/rpc"
 	"time"
+
+	//"fmt"
 )
 
 type tribServer struct {
@@ -60,8 +62,12 @@ func (ts *tribServer) CreateUser(args *tribrpc.CreateUserArgs, reply *tribrpc.Cr
 		return nil
 	} else {
 		err = ts.ls.AppendToList(s, "")
-		reply.Status = tribrpc.OK
-		return err
+		if err != nil {
+			reply.Status = tribrpc.Exists
+		} else {
+			reply.Status = tribrpc.OK
+		}
+		return nil
 	}
 }
 
@@ -97,7 +103,7 @@ func (ts *tribServer) AddSubscription(args *tribrpc.SubscriptionArgs, reply *tri
 			}
 		}
 	}
-	return err
+	return nil
 }
 
 func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *tribrpc.SubscriptionReply) error {
@@ -117,7 +123,7 @@ func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *
 		for _, str := range l {
 			if bytes.Compare([]byte(str), []byte(args.TargetUserID)) == 0 {
 				reply.Status = tribrpc.OK
-				err := ts.ls.RemoveFromList(lid, args.TargetUserID)
+				ts.ls.RemoveFromList(lid, args.TargetUserID)
 				for _, str2 := range l2 {
 					if bytes.Compare([]byte(str2), []byte(args.UserID)) == 0 {
 						ts.ls.RemoveFromList(tid, args.UserID)
@@ -125,7 +131,7 @@ func (ts *tribServer) RemoveSubscription(args *tribrpc.SubscriptionArgs, reply *
 						break
 					}
 				}
-				return err
+				return nil
 			}
 		}
 		reply.Status = tribrpc.NoSuchTargetUser
