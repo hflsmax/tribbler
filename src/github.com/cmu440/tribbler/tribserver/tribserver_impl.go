@@ -62,8 +62,12 @@ func (ts *tribServer) CreateUser(args *tribrpc.CreateUserArgs, reply *tribrpc.Cr
 		return nil
 	} else {
 		err = ts.ls.AppendToList(s, "")
-		reply.Status = tribrpc.OK
-		return err
+		if err != nil {
+			reply.Status = tribrpc.Exists
+		} else {
+			reply.Status = tribrpc.OK
+		}
+		return nil
 	}
 }
 
