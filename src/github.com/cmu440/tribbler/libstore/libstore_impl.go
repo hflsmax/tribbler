@@ -2,7 +2,6 @@ package libstore
 
 import (
 	"errors"
-
 	"container/list"
 	"github.com/cmu440/tribbler/rpc/librpc"
 	"github.com/cmu440/tribbler/rpc/storagerpc"
@@ -97,7 +96,9 @@ func NewLibstore(masterServerHostPort, myHostPort string, mode LeaseMode) (Libst
 func (ls *libstore) Get(key string) (string, error) {
 	ls.cond.L.Lock()
 	ls.count++
+	ls.cond.L.Unlock()
 	v, _, err := get(key, 0, ls)
+	ls.cond.L.Lock()
 	ls.count--
 	ls.cond.L.Unlock()
 	ls.cond.Signal()
@@ -141,7 +142,9 @@ func (ls *libstore) Delete(key string) error {
 func (ls *libstore) GetList(key string) ([]string, error) {
 	ls.cond.L.Lock()
 	ls.count++
+	ls.cond.L.Unlock()
 	_, v, err := get(key, 1, ls)
+	ls.cond.L.Lock()
 	ls.count--
 	ls.cond.L.Unlock()
 	ls.cond.Signal()

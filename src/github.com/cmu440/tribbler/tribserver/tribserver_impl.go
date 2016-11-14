@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/rpc"
 	"time"
-	//"fmt"
 )
 
 type tribServer struct {
